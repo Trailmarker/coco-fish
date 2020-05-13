@@ -1,0 +1,14 @@
+{
+  "name": "coco-fish",
+  "version": "0.1.0",
+  "description": "p5js schooling fish-like SVG letters",
+  "main": "coco-fish.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Tom Lynch",
+  "license": "ISC",
+  "devDependencies": {
+    "http-server": "^0.12.3"
+  }
+}
