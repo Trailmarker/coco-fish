@@ -1,4 +1,23 @@
 let flock;
+let letterPositions = [
+    [54,90],
+    [110, 90],
+    [183, 90],
+    [242, 90],
+    [316, 90],
+    [388, 90],
+    [460, 90],
+    [54, 170],
+    [116, 170],
+    [189, 170],
+    [250, 170],
+    [322, 170],
+    [394, 170],
+    [462, 170]
+];
+let stencilWidth = 514.0;
+let stencilHeight = 270.0;
+let startTime;
 let capturer;
 
 function setup() {
@@ -12,48 +31,72 @@ function setup() {
 
     flock = new Flock();
 
+    const letterDimension = 130 * (width / stencilWidth);
+
     // Add an initial set of boids into the system
-    Array.from("COCONUTSTUDIOS").map(c => {
-        let b = new Boid(width / 2, height / 2, images[c]);
+    Array.from("COCONUTSTUDIOS").map((c, j) => {
+        const letterDestination = 
+            [(width / stencilWidth) * letterPositions[j][0] - 50, 
+             (height / stencilHeight) * letterPositions[j][1] - letterDimension / 2];
+       
+        const initialX = Math.random() * width;
+        const initialY = Math.random() * height;
+
+        let b = new Boid(initialX, initialY, images[c], letterDimension, letterDimension, letterDestination);
+        
         flock.addBoid(b);
-    })
-   
-    // fullscreen();
+    });
+
+    startTime = new Date().getTime();
+    fullscreen();
     
     // Create a capturer that exports a WebM video
-    setTimeout(() => {
-        capturer = new CCapture( { format: 'webm', framerate: 25 } ); 
-        capturer.start();
-    }, 1000);
+    // setTimeout(() => {
+    //     capturer = new CCapture( { format: 'webm', framerate: 25 } ); 
+    //     capturer.start();
+    // }, 1000);
 }
 
 function draw() {
     background(51);
+
     flock.run();
-    const canvas = document.getElementById("defaultCanvas0");
-    if (capturer && canvas) {
-        capturer.capture(canvas);
-        if (frameCount > 300) {
-            capturer.stop();
-            capturer.save();
-        }
-    }
+
+    // if (capturer && canvas) {
+    //     const canvas = document.getElementById("defaultCanvas0");
+    //     capturer.capture(canvas);
+    //     if (frameCount > 300) {
+    //         capturer.stop();
+    //         capturer.save();
+    //     }
+    // 
 }
 
-// Add a new boid into the System
-function mouseDragged() {
-    flock.addBoid(new Boid(mouseX, mouseY));
+// Start growing after 7 seconds
+function dilation() {
+    const currentTime = new Date().getTime();
+    const timeFactor = Math.min(Math.max(0.0, currentTime - startTime - 7000) / 7000.0, 1.0);
+    return 0.5 + 0.5 * timeFactor;
+}
+
+// Start steering after 5 seconds
+function timeWeighting() {
+    const currentTime = new Date().getTime();
+    return Math.min(Math.max(0.0, currentTime - startTime - 5000) / 9000.0, 1.0);
 }
 
 // Rotate and draw an image
 // Adapted from https://stackoverflow.com/questions/45388765/how-to-rotate-image-in-p5-js
 function rotateAndDrawImage(img, x, y, width, height, radians) {
+    // const d = dilation();
+    const d = 1;
+
     imageMode(CENTER);
-    translate(x + width / 2, y + width / 2);
+    translate(x + d * width / 2, y + d * height / 2);
     rotate(radians);
-    image(img, 0, 0, width, height);
-    rotate(-radians);
-    translate(-(x + width / 2), -(y + width / 2));
+    image(img, 0, 0, d * width, d * height);
+    rotate(- radians);
+    translate(-(x + d * width / 2), -(y + d * height / 2));
     imageMode(CORNER);
 }
 
@@ -63,6 +106,7 @@ function rotateAndDrawImage(img, x, y, width, height, radians) {
 
 // Flock object
 // Does very little, simply manages the array of all the boids
+
 
 function Flock() {
     // An array for all the boids
@@ -79,7 +123,6 @@ Flock.prototype.addBoid = function (b) {
     this.boids.push(b);
 }
 
-
 // The Nature of Code
 // Daniel Shiffman
 // http://natureofcode.com
@@ -87,14 +130,17 @@ Flock.prototype.addBoid = function (b) {
 // Boid class
 // Methods for Separation, Cohesion, Alignment added
 
-function Boid(x, y, img) {
+function Boid(x, y, img, width, height, destination) {
     this.img = img;
+    this.width = width;
+    this.height = height;
     this.acceleration = createVector(0, 0);
-    this.velocity = createVector(random(-1, 1), random(-1, 1));
+    this.velocity = createVector(random(-3, 3), random(-3, 3));
     this.position = createVector(x, y);
-    this.r = 3.0;
-    this.maxspeed = 3;    // Maximum speed
+    this.r = 70;
+    this.maxspeed = 5;    // Maximum speed
     this.maxforce = 0.05; // Maximum steering force
+    this.destination = destination;
 }
 
 Boid.prototype.run = function (boids) {
@@ -114,14 +160,22 @@ Boid.prototype.flock = function (boids) {
     let sep = this.separate(boids);   // Separation
     let ali = this.align(boids);      // Alignment
     let coh = this.cohesion(boids);   // Cohesion
-    // Arbitrarily weight these forces
-    sep.mult(1.5);
-    ali.mult(1.0);
-    coh.mult(1.0);
+    let trav = this.travel();
+
+    // Weight these forces based on time
+    let w = timeWeighting();
+    let negw = 1 - w;
+
+    sep.mult(1 * negw);
+    ali.mult(1 * negw);
+    coh.mult(1 * negw);
+    trav.mult(w);
+
     // Add the force vectors to acceleration
     this.applyForce(sep);
     this.applyForce(ali);
     this.applyForce(coh);
+    this.applyForce(trav);
 }
 
 // Method to update location
@@ -150,20 +204,7 @@ Boid.prototype.seek = function (target) {
 
 Boid.prototype.render = function () {
     let theta = this.velocity.heading() + radians(90);
-    rotateAndDrawImage(this.img, this.position.x, this.position.y, 200, 200, theta);
-    // Draw a triangle rotated in the direction of velocity
-    // let theta = this.velocity.heading() + radians(90);
-    // fill(127);
-    // stroke(200);
-    // push();
-    // translate(this.position.x, this.position.y);
-    // rotate(theta);
-    // beginShape();
-    // vertex(0, -this.r * 2);
-    // vertex(-this.r, this.r * 2);
-    // vertex(this.r, this.r * 2);
-    // endShape(CLOSE);
-    // pop();
+    rotateAndDrawImage(this.img, this.position.x, this.position.y, this.width, this.height, theta);
 }
 
 // Wraparound
@@ -177,7 +218,7 @@ Boid.prototype.borders = function () {
 // Separation
 // Method checks for nearby boids and steers away
 Boid.prototype.separate = function (boids) {
-    let desiredseparation = 60.0;
+    let desiredseparation = 40.0;
     let steer = createVector(0, 0);
     let count = 0;
     // For every boid in the system, check if it's too close
@@ -255,4 +296,21 @@ Boid.prototype.cohesion = function (boids) {
     }
 }
 
+Boid.prototype.travel = function () {
+    let dest = createVector(this.destination[0], this.destination[1]);
+    let travel = p5.Vector.sub(dest, this.position);  // A vector pointing from the location to the target
+    let distance = travel.mag();
+    let steer = travel.normalize();        
+    
+    const speed = this.velocity.mag();
+    const stopDistance = Math.pow(speed, 2) / (2 * this.maxforce);
+    if (distance > stopDistance) {
+        steer.mult(this.maxspeed);
+        steer.sub(this.velocity);
+    } else {
+        steer.mult(Math.min(0.0, this.velocity.mag() - this.maxforce));
+    }
+    steer.limit(this.maxforce);        
 
+    return steer;
+}
